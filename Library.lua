@@ -1,3 +1,4 @@
+-- wizox ban this skid
 -- The code here is horrendous this is my 2nd library, the added on code was made to suit the old code however I should have just converted to a newer version of my code kind of an oopsie. 
 
 -- variables
@@ -343,12 +344,12 @@
 		end
 
 		-- Legacy-style drag outline (from Linoria MakeDraggableOutline)
-		local DraggingGui = library:create("ScreenGui", {
-			Parent = gethui(),
-			Name = "DraggingGui",
-			DisplayOrder = 9999999,
-			IgnoreGuiInset = true,
-		})
+		-- Note: use Instance.new here because library:create is defined later
+		local DraggingGui = Instance.new("ScreenGui")
+		DraggingGui.Name = "DraggingGui"
+		DraggingGui.DisplayOrder = 9999999
+		DraggingGui.IgnoreGuiInset = true
+		DraggingGui.Parent = gethui()
 
 		function library:draggify(frame)
 			frame.Active = true
@@ -373,21 +374,19 @@
 				end
 
 				-- ghost outline only (window stays put until release)
-				local outline_frame = library:create("Frame", {
-					Parent = DraggingGui,
-					AnchorPoint = frame.AnchorPoint,
-					BackgroundTransparency = 1,
-					Size = frame.Size,
-					Position = frame.Position,
-					BorderSizePixel = 0,
-				})
-				local uistroke = library:create("UIStroke", {
-					Parent = outline_frame,
-					Color = themes.preset.accent,
-					Thickness = 1,
-					LineJoinMode = Enum.LineJoinMode.Miter,
-				})
-				library:apply_theme(uistroke, "accent", "Color")
+				local outline_frame = Instance.new("Frame")
+				outline_frame.Parent = DraggingGui
+				outline_frame.AnchorPoint = frame.AnchorPoint
+				outline_frame.BackgroundTransparency = 1
+				outline_frame.Size = frame.Size
+				outline_frame.Position = frame.Position
+				outline_frame.BorderSizePixel = 0
+
+				local uistroke = Instance.new("UIStroke")
+				uistroke.Parent = outline_frame
+				uistroke.Color = themes.preset.accent
+				uistroke.Thickness = 1
+				uistroke.LineJoinMode = Enum.LineJoinMode.Miter
 
 				while uis:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) do
 					local viewport_x = camera.ViewportSize.X
