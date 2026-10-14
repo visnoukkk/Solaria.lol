@@ -765,9 +765,16 @@
 						Parent = Close
 					});         
 					
-					Close.MouseButton1Click:Connect(function()
-						items.sgui.Enabled = false;
-					end)
+                    Close.MouseButton1Click:Connect(function()
+                        items.sgui.Enabled = false;
+                        if library.background_overlay then
+                            library:tween(library.background_overlay, {BackgroundTransparency = 1})
+                            task.wait(0.25)
+                            library.background_overlay.Visible = false
+                        end
+                    end)
+                    
+                    
 
 					--library:apply_theme(main_holder, "outline", "BackgroundColor3") 
 					
@@ -978,13 +985,23 @@
 				library:tool_tip({name = cfg.name, path = items.button})
 			end 
 
-			items.sgui:GetPropertyChangedSignal("Enabled"):Connect(function()
-				items.Icon.ImageColor3 = items.sgui.Enabled and themes.preset.accent or themes.preset.inline
-			end)
+items.sgui:GetPropertyChangedSignal("Enabled"):Connect(function()
+    items.Icon.ImageColor3 = items.sgui.Enabled and themes.preset.accent or themes.preset.inline
+    
+    -- NEW: Darken/lighten background when toggling UI
+    if items.sgui.Enabled then
+        library.background_overlay.Visible = true
+        library:tween(library.background_overlay, {BackgroundTransparency = 0.7})
+    else
+        library:tween(library.background_overlay, {BackgroundTransparency = 1})
+        task.wait(0.25)
+        library.background_overlay.Visible = false
+    end
+end)
 
-			items.button.MouseButton1Click:Connect(function()
-				items.sgui.Enabled = not items.sgui.Enabled
-			end)
+items.button.MouseButton1Click:Connect(function()
+    items.sgui.Enabled = not items.sgui.Enabled
+end)
 			
 			return setmetatable(cfg, library)
 		end 
@@ -1660,7 +1677,7 @@
 				end
 
 				local main_window = library:panel({
-					name = properties and properties.name or "Atlanta | ", 
+					name = properties and properties.name or "Atlanta", 
 					size = dim2(0, main_w, 0, main_h),
 					position = dim2(0, main_x, 0, main_y),
 					image = "rbxassetid://98823308062942",
@@ -1986,6 +2003,9 @@
 					BackgroundColor3 = themes.preset.outline,
 					BorderSizePixel = 0,
 				})
+                if library.is_mobile then
+    library:draggify(dropdown_menu)  -- replace with actual var name
+end
 				library:apply_theme(ToggleUIOuter, "outline", "BackgroundColor3")
 
 				local ToggleUIInner = library:create("Frame", {
@@ -3661,17 +3681,18 @@
 				toggle_holder.Visible = bool 
 			end 
 		
-			library:connection(toggle_holder.MouseButton1Click, function()
-				cfg.enabled = not cfg.enabled
-		
-				cfg.set(cfg.enabled)
-			end)
+library:connection(toggle_holder.MouseButton1Click, function()
+    cfg.enabled = not cfg.enabled
 
-			library:connection(toggle.MouseButton1Click, function()
-				cfg.enabled = not cfg.enabled
-		
-				cfg.set(cfg.enabled)
-			end)
+    cfg.set(cfg.enabled)
+end)
+
+if library.is_mobile then
+    library:connection(toggle.MouseButton1Click, function()
+        cfg.enabled = not cfg.enabled
+        cfg.set(cfg.enabled)
+    end)
+end
 
 			if cfg.tooltip then 
 				library:tool_tip({name = cfg.tooltip, path = toggle_holder})
@@ -3753,19 +3774,25 @@
 			-- 
 
 			-- colorpicker instances
-				local colorpicker_holder = library:create("Frame", {
-					Parent = sgui,
-					Name = "colorpicker",
-					Position = dim2(0, colorpicker_button.AbsolutePosition.X + 1, 0, colorpicker_button.AbsolutePosition.Y + 17),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(0, 190, 0, 210),
-					BorderSizePixel = 0,
-					BackgroundColor3 = themes.preset.outline,
-					Visible = false,
-					ZIndex = 1
-				}) library:apply_theme(colorpicker_holder, "outline", "BackgroundColor3") 
+local colorpicker_holder = library:create("Frame", {
+    Parent = sgui,
+    Name = "colorpicker",
+    Position = dim2(0, colorpicker_button.AbsolutePosition.X + 1, 0, colorpicker_button.AbsolutePosition.Y + 17),
+    BorderColor3 = rgb(0, 0, 0),
+    Size = dim2(0, 190, 0, 210),
+    BorderSizePixel = 0,
+    BackgroundColor3 = themes.preset.outline,
+    Visible = false,
+    ZIndex = 1,
+    Active = true  -- ADD THIS
+}) library:apply_theme(colorpicker_holder, "outline", "BackgroundColor3") 
 
-				library:make_resizable(colorpicker_holder)
+-- REPLACE the make_resizable line with:
+if not library.is_mobile then
+    library:make_resizable(colorpicker_holder)
+else
+    library:draggify(colorpicker_holder)
+end
 				
 				local window_inline = library:create("Frame", {
 					Parent = colorpicker_holder,
@@ -4396,6 +4423,10 @@
 					AutomaticSize = Enum.AutomaticSize.XY,
 					BackgroundColor3 = rgb(255, 255, 255)
 				})
+
+                if library.is_mobile then
+    library:draggify(keybind_selector)
+end
 				
 				library:create("UIListLayout", {
 					Parent = keybind_selector,
