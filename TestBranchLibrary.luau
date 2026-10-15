@@ -98,6 +98,7 @@
 		drawings = {};
 
 		display_orders = 0; 
+		ui_locked = false;
 	}
 
 	local flags = library.flags
@@ -322,7 +323,7 @@
 			local og_size = frame.Size  
 
 			Frame.InputBegan:Connect(function(input)
-				if input.UserInputType == Enum.UserInputType.MouseButton1 then
+				if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 					resizing = true
 					start = input.Position
 					start_size = frame.Size
@@ -330,28 +331,32 @@
 			end)
 
 			Frame.InputEnded:Connect(function(input)
-				if input.UserInputType == Enum.UserInputType.MouseButton1 then
+				if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 					resizing = false
 				end
 			end)
 
 			library:connection(uis.InputChanged, function(input, game_event) 
-				if resizing and input.UserInputType == Enum.UserInputType.MouseMovement then
+				if resizing and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
 					local viewport_x = camera.ViewportSize.X
 					local viewport_y = camera.ViewportSize.Y
+					local min_x = og_size.X.Offset
+					local min_y = og_size.Y.Offset
+					local max_x = math.max(min_x, viewport_x)
+					local max_y = math.max(min_y, viewport_y)
 
 					local current_size = dim2(
 						start_size.X.Scale,
 						math.clamp(
 							start_size.X.Offset + (input.Position.X - start.X),
-							og_size.X.Offset,
-							viewport_x
+							min_x,
+							max_x
 						),
 						start_size.Y.Scale,
 						math.clamp(
 							start_size.Y.Offset + (input.Position.Y - start.Y),
-							og_size.Y.Offset,
-							viewport_y
+							min_y,
+							max_y
 						)
 					)
 					frame.Size = current_size
@@ -382,6 +387,7 @@
 			frame.Active = true
 
 			frame.InputBegan:Connect(function(input)
+				if library.ui_locked then return end
 				local is_mouse = input.UserInputType == Enum.UserInputType.MouseButton1
 				local is_touch = input.UserInputType == Enum.UserInputType.Touch
 				if not is_mouse and not is_touch then return end
@@ -442,8 +448,10 @@
 					local viewport_x = camera.ViewportSize.X
 					local viewport_y = camera.ViewportSize.Y
 					local pos = chg.Position
-					local new_x = clamp(pos.X - obj_pos.X, 0, viewport_x - frame.AbsoluteSize.X)
-					local new_y = clamp(pos.Y - obj_pos.Y, 0, viewport_y - frame.AbsoluteSize.Y)
+					local max_x = math.max(0, viewport_x - frame.AbsoluteSize.X)
+					local max_y = math.max(0, viewport_y - frame.AbsoluteSize.Y)
+					local new_x = clamp(pos.X - obj_pos.X, 0, max_x)
+					local new_y = clamp(pos.Y - obj_pos.Y, 0, max_y)
 					outline_frame.Position = UDim2.fromOffset(new_x, new_y)
 					outline_frame.BackgroundColor3 = themes.preset.accent
 					uistroke.Color = themes.preset.accent
@@ -765,16 +773,9 @@
 						Parent = Close
 					});         
 					
-                    Close.MouseButton1Click:Connect(function()
-                        items.sgui.Enabled = false;
-                        if library.background_overlay then
-                            library:tween(library.background_overlay, {BackgroundTransparency = 1})
-                            task.wait(0.25)
-                            library.background_overlay.Visible = false
-                        end
-                    end)
-                    
-                    
+					Close.MouseButton1Click:Connect(function()
+						items.sgui.Enabled = false;
+					end)
 
 					--library:apply_theme(main_holder, "outline", "BackgroundColor3") 
 					
@@ -985,23 +986,13 @@
 				library:tool_tip({name = cfg.name, path = items.button})
 			end 
 
-items.sgui:GetPropertyChangedSignal("Enabled"):Connect(function()
-    items.Icon.ImageColor3 = items.sgui.Enabled and themes.preset.accent or themes.preset.inline
-    
-    -- NEW: Darken/lighten background when toggling UI
-    if items.sgui.Enabled then
-        library.background_overlay.Visible = true
-        library:tween(library.background_overlay, {BackgroundTransparency = 0.7})
-    else
-        library:tween(library.background_overlay, {BackgroundTransparency = 1})
-        task.wait(0.25)
-        library.background_overlay.Visible = false
-    end
-end)
+			items.sgui:GetPropertyChangedSignal("Enabled"):Connect(function()
+				items.Icon.ImageColor3 = items.sgui.Enabled and themes.preset.accent or themes.preset.inline
+			end)
 
-items.button.MouseButton1Click:Connect(function()
-    items.sgui.Enabled = not items.sgui.Enabled
-end)
+			items.button.MouseButton1Click:Connect(function()
+				items.sgui.Enabled = not items.sgui.Enabled
+			end)
 			
 			return setmetatable(cfg, library)
 		end 
@@ -1312,6 +1303,26 @@ end)
 				Size = 15
 			});    
 
+			-- full-screen darken overlay when menu is open
+			local dim_gui = library:create("ScreenGui", {
+				Enabled = true,
+				Parent = gethui(),
+				Name = "AtlantaDim",
+				DisplayOrder = 0,
+				IgnoreGuiInset = true,
+			})
+			local dim_frame = library:create("Frame", {
+				Parent = dim_gui,
+				Name = "Dim",
+				BackgroundColor3 = Color3.new(0, 0, 0),
+				BackgroundTransparency = 0.45,
+				BorderSizePixel = 0,
+				Size = dim2(1, 0, 1, 0),
+				Position = dim2(0, 0, 0, 0),
+				ZIndex = 0,
+				Active = false,
+			})
+
 			library.cache = library:create("ScreenGui", {
 				Enabled = false,
 				Parent = gethui(),
@@ -1396,6 +1407,17 @@ end)
 				end
 
 				library:tween(blur, {Size = bool and (flags["Blur Size"] or 15) or 0})
+				if dim_frame then
+					library:tween(dim_frame, {BackgroundTransparency = bool and 0.45 or 1})
+					dim_gui.Enabled = true
+					if not bool then
+						task.delay(0.3, function()
+							if not window.opened and dim_frame then
+								dim_frame.BackgroundTransparency = 1
+							end
+						end)
+					end
+				end
 
 				dock_outline.Visible = bool;
 
@@ -1676,8 +1698,9 @@ end)
 					main_y = math.floor((vp.Y - main_h) / 2) - 10
 				end
 
+				local main_title = (properties and properties.name) or os.date("Atlanta | %b %d %Y")
 				local main_window = library:panel({
-					name = properties and properties.name or "Atlanta", 
+					name = main_title, 
 					size = dim2(0, main_w, 0, main_h),
 					position = dim2(0, main_x, 0, main_y),
 					image = "rbxassetid://98823308062942",
@@ -1991,21 +2014,18 @@ end)
 				end
 			end)
 
-			-- Mobile: Linoria-style "Toggle UI" button
+			-- Mobile: merged "Toggle UI" + "Lock UI" bar
 			if library.is_mobile then
 				local ToggleUIOuter = library:create("Frame", {
 					Parent = sgui,
 					BorderColor3 = rgb(0, 0, 0),
 					Position = dim2(0.008, 0, 0.018, 0),
-					Size = dim2(0, 90, 0, 32),
+					Size = dim2(0, 168, 0, 32),
 					ZIndex = 200,
 					Visible = true,
 					BackgroundColor3 = themes.preset.outline,
 					BorderSizePixel = 0,
 				})
-                if library.is_mobile then
-    library:draggify(dropdown_menu)  -- replace with actual var name
-end
 				library:apply_theme(ToggleUIOuter, "outline", "BackgroundColor3")
 
 				local ToggleUIInner = library:create("Frame", {
@@ -2037,37 +2057,76 @@ end
 				})
 				library:apply_theme(ToggleUIGradient, "contrast", "Color")
 
-				local ToggleUIButton = library:create("TextButton", {
+				library:create("UIListLayout", {
 					Parent = ToggleUIInnerFrame,
-					Position = dim2(0, 5, 0, 0),
-					Size = dim2(1, -4, 1, 0),
-					BackgroundTransparency = 1,
-					FontFace = library.font,
-					Text = "Toggle UI",
-					TextColor3 = themes.preset.text,
-					TextSize = 12,
-					TextXAlignment = Enum.TextXAlignment.Left,
-					ZIndex = 203,
-					BorderSizePixel = 0,
-					AutoButtonColor = false,
+					FillDirection = Enum.FillDirection.Horizontal,
+					HorizontalFlex = Enum.UIFlexAlignment.Fill,
+					Padding = dim(0, 2),
+					SortOrder = Enum.SortOrder.LayoutOrder,
+					VerticalAlignment = Enum.VerticalAlignment.Center,
 				})
-				library:apply_theme(ToggleUIButton, "text", "TextColor3")
 
-				-- make the toggle button draggable (whole outer frame)
+				local function make_mobile_btn(label, order)
+					local btn = library:create("TextButton", {
+						Parent = ToggleUIInnerFrame,
+						Size = dim2(0.5, -2, 1, 0),
+						BackgroundTransparency = 1,
+						FontFace = library.font,
+						Text = label,
+						TextColor3 = themes.preset.text,
+						TextSize = 11,
+						TextXAlignment = Enum.TextXAlignment.Center,
+						ZIndex = 203,
+						BorderSizePixel = 0,
+						AutoButtonColor = false,
+						LayoutOrder = order,
+					})
+					library:apply_theme(btn, "text", "TextColor3")
+					return btn
+				end
+
+				local ToggleUIButton = make_mobile_btn("Toggle UI", 1)
+				local LockUIButton = make_mobile_btn("Lock UI", 3)
+
+				-- divider line between the two buttons
+				local divider = library:create("Frame", {
+					Parent = ToggleUIInnerFrame,
+					Size = dim2(0, 1, 0.7, 0),
+					BackgroundColor3 = themes.preset.inline,
+					BorderSizePixel = 0,
+					ZIndex = 204,
+					LayoutOrder = 2,
+				})
+				library:apply_theme(divider, "inline", "BackgroundColor3")
+
+				-- make the whole bar draggable
 				library:draggify(ToggleUIOuter)
 
-				ToggleUIButton.MouseButton1Click:Connect(function()
+				local function fire_toggle()
 					window.set_menu_visibility(not window.opened)
-				end)
-				-- also support touch
+				end
+
+				ToggleUIButton.MouseButton1Click:Connect(fire_toggle)
 				ToggleUIButton.InputBegan:Connect(function(input)
 					if input.UserInputType == Enum.UserInputType.Touch then
-						window.set_menu_visibility(not window.opened)
+						fire_toggle()
+					end
+				end)
+
+				local function fire_lock()
+					library.ui_locked = not library.ui_locked
+					LockUIButton.Text = library.ui_locked and "Unlock UI" or "Lock UI"
+					LockUIButton.TextColor3 = library.ui_locked and themes.preset.accent or themes.preset.text
+				end
+
+				LockUIButton.MouseButton1Click:Connect(fire_lock)
+				LockUIButton.InputBegan:Connect(function(input)
+					if input.UserInputType == Enum.UserInputType.Touch then
+						fire_lock()
 					end
 				end)
 
 				-- on mobile start with main UI visible; secondary already disabled
-				-- ensure main is on
 				pcall(function() main_window.items.sgui.Enabled = true end)
 			end
 
@@ -3681,18 +3740,17 @@ end
 				toggle_holder.Visible = bool 
 			end 
 		
-library:connection(toggle_holder.MouseButton1Click, function()
-    cfg.enabled = not cfg.enabled
+			library:connection(toggle_holder.MouseButton1Click, function()
+				cfg.enabled = not cfg.enabled
+		
+				cfg.set(cfg.enabled)
+			end)
 
-    cfg.set(cfg.enabled)
-end)
-
-if library.is_mobile then
-    library:connection(toggle.MouseButton1Click, function()
-        cfg.enabled = not cfg.enabled
-        cfg.set(cfg.enabled)
-    end)
-end
+			library:connection(toggle.MouseButton1Click, function()
+				cfg.enabled = not cfg.enabled
+		
+				cfg.set(cfg.enabled)
+			end)
 
 			if cfg.tooltip then 
 				library:tool_tip({name = cfg.tooltip, path = toggle_holder})
@@ -3774,25 +3832,19 @@ end
 			-- 
 
 			-- colorpicker instances
-local colorpicker_holder = library:create("Frame", {
-    Parent = sgui,
-    Name = "colorpicker",
-    Position = dim2(0, colorpicker_button.AbsolutePosition.X + 1, 0, colorpicker_button.AbsolutePosition.Y + 17),
-    BorderColor3 = rgb(0, 0, 0),
-    Size = dim2(0, 190, 0, 210),
-    BorderSizePixel = 0,
-    BackgroundColor3 = themes.preset.outline,
-    Visible = false,
-    ZIndex = 1,
-    Active = true  -- ADD THIS
-}) library:apply_theme(colorpicker_holder, "outline", "BackgroundColor3") 
+				local colorpicker_holder = library:create("Frame", {
+					Parent = sgui,
+					Name = "colorpicker",
+					Position = dim2(0, colorpicker_button.AbsolutePosition.X + 1, 0, colorpicker_button.AbsolutePosition.Y + 17),
+					BorderColor3 = rgb(0, 0, 0),
+					Size = dim2(0, 190, 0, 210),
+					BorderSizePixel = 0,
+					BackgroundColor3 = themes.preset.outline,
+					Visible = false,
+					ZIndex = 1
+				}) library:apply_theme(colorpicker_holder, "outline", "BackgroundColor3") 
 
--- REPLACE the make_resizable line with:
-if not library.is_mobile then
-    library:make_resizable(colorpicker_holder)
-else
-    library:draggify(colorpicker_holder)
-end
+				library:make_resizable(colorpicker_holder)
 				
 				local window_inline = library:create("Frame", {
 					Parent = colorpicker_holder,
@@ -4423,10 +4475,6 @@ end
 					AutomaticSize = Enum.AutomaticSize.XY,
 					BackgroundColor3 = rgb(255, 255, 255)
 				})
-
-                if library.is_mobile then
-    library:draggify(keybind_selector)
-end
 				
 				library:create("UIListLayout", {
 					Parent = keybind_selector,
