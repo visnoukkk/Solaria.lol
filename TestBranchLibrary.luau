@@ -375,7 +375,7 @@
 			DraggingGui = Instance.new("ScreenGui")
 			DraggingGui.Name = "DraggingGui"
 			DraggingGui.DisplayOrder = 9999999
-			DraggingGui.IgnoreGuiInset = false
+			DraggingGui.IgnoreGuiInset = true
 			DraggingGui.ResetOnSpawn = false
 			pcall(function()
 				DraggingGui.Parent = gethui and gethui() or game:GetService("CoreGui")
@@ -411,22 +411,33 @@
 
 				local parent_gui = get_dragging_gui()
 
-				-- filled accent ghost (same size/position as window)
+				-- drag ghost: filled body + border drawn as nested frames so outline
+				-- never sits above/outside the rectangle (fixes watermark misalignment)
 				local outline_frame = Instance.new("Frame")
 				outline_frame.Parent = parent_gui
 				outline_frame.AnchorPoint = Vector2.new(0, 0)
-				outline_frame.BackgroundTransparency = 0.45
+				outline_frame.BackgroundTransparency = 0
 				outline_frame.BackgroundColor3 = themes.preset.accent
 				outline_frame.Size = UDim2.fromOffset(frame.AbsoluteSize.X, frame.AbsoluteSize.Y)
 				outline_frame.Position = UDim2.fromOffset(frame.AbsolutePosition.X, frame.AbsolutePosition.Y)
 				outline_frame.BorderSizePixel = 0
 				outline_frame.ZIndex = 1
 
+				local ghost_inner = Instance.new("Frame")
+				ghost_inner.Parent = outline_frame
+				ghost_inner.BackgroundColor3 = themes.preset.accent
+				ghost_inner.BackgroundTransparency = 0.45
+				ghost_inner.BorderSizePixel = 0
+				ghost_inner.Size = UDim2.new(1, -4, 1, -4)
+				ghost_inner.Position = UDim2.fromOffset(2, 2)
+				ghost_inner.ZIndex = 2
+
 				local uistroke = Instance.new("UIStroke")
 				uistroke.Parent = outline_frame
 				uistroke.Color = themes.preset.accent
-				uistroke.Thickness = 2
+				uistroke.Thickness = 1
 				uistroke.LineJoinMode = Enum.LineJoinMode.Miter
+				uistroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 
 				local dragging = true
 				local move_conn
@@ -454,6 +465,9 @@
 					local new_y = clamp(pos.Y - obj_pos.Y, 0, max_y)
 					outline_frame.Position = UDim2.fromOffset(new_x, new_y)
 					outline_frame.BackgroundColor3 = themes.preset.accent
+					if ghost_inner then
+						ghost_inner.BackgroundColor3 = themes.preset.accent
+					end
 					uistroke.Color = themes.preset.accent
 				end)
 
@@ -2880,6 +2894,19 @@
 					BackgroundColor3 = rgb(255, 255, 255)
 				}, "text")
 				library:apply_theme(text, "accent", "TextColor3")
+
+				-- EliteZone-style accent bar on top of selected tab
+				local tab_accent = library:create("Frame", {
+					Parent = tab_holder,
+					Name = "TabAccent",
+					BackgroundColor3 = themes.preset.accent,
+					BorderSizePixel = 0,
+					Position = dim2(0, 0, 0, 0),
+					Size = dim2(1, 0, 0, 1),
+					Visible = false,
+					ZIndex = 10,
+				})
+				library:apply_theme(tab_accent, "accent", "BackgroundColor3")
 			-- 
 
 			-- section instances 
@@ -2895,6 +2922,7 @@
 				})
 			
 				cfg["holder"] = section_holder
+				cfg.tab_accent = tab_accent
 
 				library:create("UIListLayout", {
 					Parent = section_holder,
@@ -2911,6 +2939,10 @@
 					button.Size = dim2(1, -2, 1, -1)
 					button:FindFirstChildOfClass("UIGradient").Rotation = 90
 					button:FindFirstChildOfClass("TextLabel").TextColor3 = themes.preset.text
+					-- hide previous tab accent bar
+					if library.current_tab[3] then
+						library.current_tab[3].Visible = false
+					end
 						
 					library.current_tab[2].Visible = false
 					
@@ -2918,13 +2950,14 @@
 				end
 				
 				library.current_tab = {
-					background, section_holder
+					background, section_holder, tab_accent
 				}
 				
 				local button = library.current_tab[1] 
 				button.Size = dim2(1, -2, 1, 0) -- ENABLED
 				button:FindFirstChildOfClass("UIGradient").Rotation = -90
 				button:FindFirstChildOfClass("TextLabel").TextColor3 = themes.preset.accent 
+				tab_accent.Visible = true
 
 				library.current_tab[2].Visible = true 
 
